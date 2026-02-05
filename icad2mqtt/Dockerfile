@@ -1,3 +1,6 @@
+# Build arguments - must be declared before first FROM
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
+
 # Build stage
 FROM golang:1.21-alpine AS builder
 
@@ -17,7 +20,6 @@ COPY *.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o icad2mqtt .
 
 # Final stage - use Home Assistant base image
-ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 # Install ca-certificates and jq for config parsing
