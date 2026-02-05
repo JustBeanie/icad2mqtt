@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-icad2mqtt
+/icad2mqtt
 dist/
 bin/
 

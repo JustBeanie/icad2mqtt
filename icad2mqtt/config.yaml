@@ -1,0 +1,28 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
+name: ICAD to MQTT Bridge
+version: "1.0.0"
+slug: icad2mqtt
+description: Fetch active CAD calls from 911events and publish to MQTT
+url: "https://github.com/JustBeanie/icad2mqtt"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+startup: service
+boot: auto
+hassio_api: false
+hassio_role: default
+host_network: false
+network_mode: host
+services:
+  - mqtt
+options:
+  mqtt_broker: "tcp://localhost:1883"
+  mqtt_topic: "911/cad/events"
+  poll_interval: 30
+schema:
+  mqtt_broker: "str"
+  mqtt_topic: "str?"
+  poll_interval: "int?"
+image: "ghcr.io/JustBeanie/icad2mqtt-{arch}"
