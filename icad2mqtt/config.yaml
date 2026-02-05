@@ -9,14 +9,13 @@ arch:
   - amd64
   - armhf
   - armv7
-startup: service
+startup: application
 boot: auto
 hassio_api: false
 hassio_role: default
 host_network: false
-network_mode: host
 services:
-  - mqtt
+  - mqtt:want
 options:
   mqtt_broker: "tcp://localhost:1883"
   mqtt_topic: "911/cad/events"
@@ -25,4 +24,4 @@ schema:
   mqtt_broker: "str"
   mqtt_topic: "str?"
   poll_interval: "int?"
-image: "ghcr.io/JustBeanie/icad2mqtt-{arch}"
+image: "ghcr.io/justbeanie/{arch}-addon-icad2mqtt"
