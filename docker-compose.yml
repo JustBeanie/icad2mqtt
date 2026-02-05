@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  icad2mqtt:
+    build: .
+    container_name: icad2mqtt
+    environment:
+      - MQTT_BROKER=tcp://mosquitto:1883
+      - MQTT_TOPIC=911/cad/events
+      - POLL_INTERVAL=30
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+    logs:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
