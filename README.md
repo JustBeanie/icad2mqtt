@@ -5,7 +5,7 @@ A lightweight Go application that fetches active calls from the 911 events endpo
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/icad2mqtt.git
+git clone https://github.com/JustBeanie/icad2mqtt.git
 cd icad2mqtt
 docker-compose up
 ```
@@ -69,7 +69,7 @@ docker run \
 
 1. Add the repository to Home Assistant:
    - Settings → Add-ons → Create add-on repository
-   - URL: `https://github.com/YOUR_USERNAME/icad2mqtt` (replace with your GitHub username)
+   - URL: `https://github.com/JustBeanie/icad2mqtt`
 
 2. Install ICAD to MQTT Bridge from the add-on store
 
