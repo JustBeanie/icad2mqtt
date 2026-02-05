@@ -24,4 +24,3 @@ schema:
   mqtt_broker: "str"
   mqtt_topic: "str?"
   poll_interval: "int?"
-image: "ghcr.io/justbeanie/{arch}-addon-icad2mqtt"

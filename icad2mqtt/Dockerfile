@@ -16,11 +16,12 @@ COPY *.go ./
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o icad2mqtt .
 
-# Final stage
-FROM alpine:latest
+# Final stage - use Home Assistant base image
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
 # Install ca-certificates and jq for config parsing
-RUN apk --no-cache add ca-certificates jq
+RUN apk add --no-cache ca-certificates jq
 
 WORKDIR /app
 
@@ -28,12 +29,8 @@ WORKDIR /app
 COPY --from=builder /app/icad2mqtt .
 
 # Copy run script
-COPY icad2mqtt/run.sh .
-RUN chmod +x run.sh
-
-# Create non-root user
-RUN addgroup -D appgroup && adduser -D appuser -G appgroup
-USER appuser
+COPY run.sh /run.sh
+RUN chmod a+x /run.sh
 
 # Run the application
-CMD ["./run.sh"]
+CMD [ "/run.sh" ]
