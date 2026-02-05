@@ -93,7 +93,7 @@ docker run \
 
 To build and test locally:
 ```bash
-docker build -f addon/Dockerfile -t icad2mqtt-addon .
+docker build -f icad2mqtt/Dockerfile -t icad2mqtt-addon .
 ```
 
 ## Project Structure
@@ -104,10 +104,11 @@ icad2mqtt/
 ├── go.mod/go.sum        # Go dependencies
 ├── Dockerfile           # Docker image for standalone
 ├── docker-compose.yml   # Docker Compose with MQTT
-├── addon/
-│   ├── addon.json       # Home Assistant manifest
-│   ├── run.sh           # Addon startup script
-│   └── Dockerfile       # Addon-specific Dockerfile
+├── repository.yaml      # Home Assistant repository config
+├── icad2mqtt/           # Home Assistant add-on
+│   ├── config.yaml      # Add-on configuration
+│   ├── run.sh           # Add-on startup script
+│   └── Dockerfile       # Add-on-specific Dockerfile
 └── README.md            # This file
 ```
 

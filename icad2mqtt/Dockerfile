@@ -4,7 +4,8 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 
 # Copy go mod files
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY go.sum* ./
 
 # Download dependencies
 RUN go mod download
@@ -27,7 +28,7 @@ WORKDIR /app
 COPY --from=builder /app/icad2mqtt .
 
 # Copy run script
-COPY addon/run.sh .
+COPY icad2mqtt/run.sh .
 RUN chmod +x run.sh
 
 # Create non-root user
