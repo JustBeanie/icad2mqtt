@@ -1,10 +1,10 @@
 # Build stage. Keep the build toolchain out of the runtime image.
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
 # Copy module metadata first so dependency downloads are cached.
-COPY go.mod ./
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download

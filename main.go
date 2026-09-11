@@ -180,7 +180,11 @@ func (b *Bridge) fetchEvents(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			log.Printf("failed to close HTTP response body: %v", err)
+		}
+	}()
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected HTTP status: %s", response.Status)
 	}

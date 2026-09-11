@@ -2,12 +2,12 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
 # Copy module metadata and source. The add-on is built from this directory.
-COPY go.mod ./
+COPY go.mod go.sum ./
 COPY *.go ./
 
 # Download dependencies without changing the module definition during a build.
