@@ -49,7 +49,7 @@ func main() {
 			log.Printf("failed to fetch CAD events: %v", fetchErr)
 		} else if !hasLast || data != last {
 			publish := client.Publish(topic, 1, false, data)
-			if !publish.WaitTimeout(5 * time.Second) || publish.Error() != nil {
+			if !publish.WaitTimeout(5*time.Second) || publish.Error() != nil {
 				log.Printf("failed to publish CAD events: %v", publish.Error())
 			} else {
 				last, hasLast = data, true
