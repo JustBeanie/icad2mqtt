@@ -1,161 +1,215 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 const (
-	// 911events endpoint
-	cadEventURL = "https://911events.ongov.net/CADInet/app/events.jsp"
-	
-	// Default configuration
-	defaultMqttBroker   = "tcp://localhost:1883"
-	defaultMqttTopic    = "911/cad/events"
-	defaultClientID     = "icad2mqtt"
-	defaultPollInterval = 30
+	cadEventURL           = "https://911events.ongov.net/CADInet/app/events.jsp"
+	defaultMqttBroker     = "tcp://localhost:1883"
+	defaultMqttTopic      = "911/cad/events"
+	defaultClientID       = "icad2mqtt"
+	defaultPollInterval   = 30 * time.Second
+	defaultRequestTimeout = 10 * time.Second
+	maxResponseSize       = 5 << 20
 )
 
-var (
-	mqttBroker   string
-	mqttTopic    string
-	clientID     string
-	pollInterval int
-)
-
-var (
-	mqttClient mqtt.Client
-	lastUpdate string
-)
-
-func init() {
-	// Load configuration from environment variables
-	mqttBroker = getEnv("MQTT_BROKER", defaultMqttBroker)
-	mqttTopic = getEnv("MQTT_TOPIC", defaultMqttTopic)
-	clientID = getEnv("CLIENT_ID", defaultClientID)
-	
-	pollStr := getEnv("POLL_INTERVAL", strconv.Itoa(defaultPollInterval))
-	poll, err := strconv.Atoi(pollStr)
-	if err != nil || poll < 1 {
-		poll = default
-	ticker := time.NewTicker(time.Duration(pollInterval)
-	pollInterval = poll
+type Config struct {
+	MqttBroker     string
+	MqttTopic      string
+	ClientID       string
+	PollInterval   time.Duration
+	RequestTimeout time.Duration
+	UserAgent      string
 }
 
-func getEnv(key, defaultVal string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultVal
+type mqttPublisher interface {
+	Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token
+}
+
+type Bridge struct {
+	client     mqttPublisher
+	httpClient *http.Client
+	config     Config
+	eventURL   string
+	lastUpdate string
+	hasUpdate  bool
 }
 
 func main() {
-	log.Println("Starting ICAD to MQTT bridge...")
-	log.Printf("MQTT Broker: %s", redactBroker(mqttBroker))
-	log.Printf("MQTT Topic: %s", mqttTopic)
-	log.Printf("Poll Interval: %d seconds", pollInterval)
-	
-	// Connect to MQTT broker
-	if err := connectMQTT(); err != nil {
-		log.Fatalf("Failed to connect to MQTT broker: %v", err)
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatalf("invalid configuration: %v", err)
 	}
-	defer mqttClient.Disconnect(250)
-	
-	// Polling loop - fetch events every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	
-	// Initial fetch
-	fetchAndPublish()
-	
-	for range ticker.C {
-		fetchAndPublish()
+
+	log.Printf("starting ICAD to MQTT bridge (broker=%s topic=%s interval=%s)",
+		redactBroker(config.MqttBroker), config.MqttTopic, config.PollInterval)
+
+	client, err := connectMQTT(config)
+	if err != nil {
+		log.Fatalf("failed to connect to MQTT broker: %v", err)
 	}
+	defer client.Disconnect(250)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	bridge := &Bridge{
+		client:     client,
+		httpClient: &http.Client{Timeout: config.RequestTimeout},
+		config:     config,
+		eventURL:   cadEventURL,
+	}
+	bridge.Run(ctx)
+	log.Println("ICAD to MQTT bridge stopped")
 }
 
-func connectMQTT() error {
+func loadConfig() (Config, error) {
+	pollSeconds, err := positiveIntEnv("POLL_INTERVAL", int(defaultPollInterval/time.Second))
+	if err != nil {
+		return Config{}, err
+	}
+
+	return Config{
+		MqttBroker:     getEnv("MQTT_BROKER", defaultMqttBroker),
+		MqttTopic:      getEnv("MQTT_TOPIC", defaultMqttTopic),
+		ClientID:       getEnv("CLIENT_ID", defaultClientID),
+		PollInterval:   time.Duration(pollSeconds) * time.Second,
+		RequestTimeout: defaultRequestTimeout,
+		UserAgent:      getEnv("HTTP_USER_AGENT", "icad2mqtt/1.0"),
+	}, nil
+}
+
+func positiveIntEnv(key string, fallback int) (int, error) {
+	raw := getEnv(key, strconv.Itoa(fallback))
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, raw)
+	}
+	return value, nil
+}
+
+func getEnv(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func connectMQTT(config Config) (mqtt.Client, error) {
 	opts := mqtt.NewClientOptions()
-	opts.AddBroker(mqttBroker)
-	opts.SetClientID(clientID)
+	opts.AddBroker(config.MqttBroker)
+	opts.SetClientID(config.ClientID)
 	opts.SetAutoReconnect(true)
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(2 * time.Second)
-	opts.OnConnect = func(c mqtt.Client) {
-		log.Println("Connected to MQTT broker")
+	opts.OnConnect = func(mqtt.Client) { log.Println("connected to MQTT broker") }
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) { log.Printf("MQTT connection lost: %v", err) }
+
+	client := mqtt.NewClient(opts)
+	if token := client.Connect(); !token.WaitTimeout(15 * time.Second) {
+		return nil, fmt.Errorf("connection timeout")
+	} else if token.Error() != nil {
+		return nil, token.Error()
 	}
-	opts.OnConnectionLost = func(c mqtt.Client, err error) {
-		log.Printf("Connection lost: %v", err)
-	}
-	
-	mqttClient = mqtt.NewClient(opts)
-	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
-		return token.Error()
-	}
-	
-	return nil
+	return client, nil
 }
 
-func fetchAndPublish() {
-	data, err := fetchEvents()
+func (b *Bridge) Run(ctx context.Context) {
+	b.poll(ctx)
+	ticker := time.NewTicker(b.config.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			b.poll(ctx)
+		}
+	}
+}
+
+func (b *Bridge) poll(ctx context.Context) {
+	data, err := b.fetchEvents(ctx)
 	if err != nil {
-		log.Printf("Error fetching events: %v", err)
+		log.Printf("failed to fetch CAD events: %v", err)
 		return
 	}
-	
-	// Only publish if data has changed
-	if data != lastUpdate {
-		lastUpdate = data
-		publishToMQTT(data)
-		log.Println("Published update to MQTT")
+	changed, err := b.publishIfChanged(data)
+	if err != nil {
+		log.Printf("failed to publish CAD events: %v", err)
+		return
+	}
+	if changed {
+		log.Printf("published CAD update (%d bytes)", len(data))
 	}
 }
 
-func fetchEvents() (string, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+func (b *Bridge) fetchEvents(ctx context.Context) (string, error) {
+	eventURL := b.eventURL
+	if eventURL == "" {
+		eventURL = cadEventURL
 	}
-	
-	resp, err := client.Get(cadEventURL)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, eventURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create HTTP request: %w", err)
+	}
+	request.Header.Set("User-Agent", b.config.UserAgent)
+
+	response, err := b.httpClient.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected HTTP status: %s", response.Status)
 	}
-	
-	body, err := io.ReadAll(resp.Body)
+
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseSize+1))
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", fmt.Errorf("read HTTP response: %w", err)
 	}
-	
+	if len(body) > maxResponseSize {
+		return "", fmt.Errorf("HTTP response exceeds %d bytes", maxResponseSize)
+	}
 	return string(body), nil
 }
 
-func publishToMQTT(data string) {
-	token := mqttClient.Publish(mqttTopic, 1, false, data)
+func (b *Bridge) publishIfChanged(data string) (bool, error) {
+	if b.hasUpdate && data == b.lastUpdate {
+		return false, nil
+	}
+	token := b.client.Publish(b.config.MqttTopic, 1, false, data)
 	if !token.WaitTimeout(5 * time.Second) {
-		log.Println("Warning: MQTT publish timeout")
+		return false, fmt.Errorf("MQTT publish timeout")
 	}
-	if token.Error() != nil {
-		log.Printf("Error publishing to MQTT: %v", token.Error())
+	if err := token.Error(); err != nil {
+		return false, err
 	}
+	b.lastUpdate = data
+	b.hasUpdate = true
+	return true, nil
 }
 
-func redactBroker(broker string) string {
-	// Redact password from broker URL for logging
-	if strings.Contains(broker, "@") {
-		parts := strings.Split(broker, "@")
-		return parts[0] + "@***:***"
+func redactBroker(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User == nil {
+		return raw
 	}
-	return broker
+	parsed.User = url.UserPassword("***", "***")
+	return parsed.String()
 }
