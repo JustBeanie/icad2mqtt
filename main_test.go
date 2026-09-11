@@ -12,9 +12,10 @@ import (
 
 type fakeToken struct{ err error }
 
-func (t fakeToken) Wait() bool                         { return true }
-func (t fakeToken) WaitTimeout(time.Duration) bool     { return true }
-func (t fakeToken) Error() error                       { return t.err }
+func (t fakeToken) Wait() bool                     { return true }
+func (t fakeToken) WaitTimeout(time.Duration) bool { return true }
+func (t fakeToken) Error() error                   { return t.err }
+func (t fakeToken) Done() <-chan struct{}          { done := make(chan struct{}); close(done); return done }
 
 type fakePublisher struct {
 	topic   string

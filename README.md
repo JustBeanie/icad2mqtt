@@ -1,6 +1,8 @@
 # ICAD to MQTT Bridge
 
-A lightweight Go application that fetches active calls from the 911 events endpoint and publishes updates over MQTT.
+A small Go service that fetches the current CAD events document and publishes
+only changed responses over MQTT. It is designed to run as a root Docker
+container build or a Home Assistant add-on.
 
 ## Quick Start
 
@@ -15,8 +17,11 @@ docker-compose up
 - Polls `https://911events.ongov.net/CADInet/app/events.jsp` for active calls
 - Publishes updates to an MQTT broker
 - Only sends updates when data changes
-- Automatic MQTT reconnection with exponential backoff
+- Automatic MQTT reconnection with retry backoff
 - Configurable polling interval
+- Graceful shutdown on SIGINT/SIGTERM
+- Bounded HTTP requests and response size
+- Non-root Docker runtime
 - Docker and Home Assistant add-on support
 
 ## Configuration
@@ -35,9 +40,12 @@ Via environment variables:
 
 ```bash
 go mod download
-go build -o icad2mqtt
+go build -trimpath -o icad2mqtt
 ./icad2mqtt
 ```
+
+Run the same checks used by CI with `go test -race ./...`, `go vet ./...`, and
+`gofmt -l .` (which must produce no output).
 
 ## Running with Docker
 
@@ -50,9 +58,13 @@ This starts both the app and Mosquitto MQTT broker.
 
 ### Build Custom Image
 ```bash
-docker build -t icad2mqtt .
+docker build --pull -t icad2mqtt:local .
 docker run -e MQTT_BROKER=tcp://your-broker:1883 icad2mqtt
 ```
+
+The Dockerfile and Docker build context are at the repository root. The image
+runs as a non-root user and contains only the compiled service and CA
+certificates.
 
 ### Environment Variables in Docker
 ```bash
@@ -123,6 +135,14 @@ The application outputs logs to stdout showing:
 - Configuration details
 - Fetch errors
 - MQTT publish events
+
+Broker credentials are not logged. Do not put secrets in committed `.env` files.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for reporting guidance and
+[SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the current OWASP SAMM/DSOMM-oriented
+repository audit and residual risks.
 
 ## Contributing
 

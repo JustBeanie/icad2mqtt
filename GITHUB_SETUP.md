@@ -1,8 +1,9 @@
 # GitHub Repository Setup Guide
 
-Your repository is now ready to be pushed to GitHub! Follow these steps:
+This repository is already connected to `https://github.com/JustBeanie/icad2mqtt`.
+For a new checkout, the normal workflow is:
 
-## 1. Create a GitHub Repository
+## 1. Create a GitHub Repository (only if you are starting elsewhere)
 
 1. Go to [GitHub](https://github.com) and sign in
 2. Click the "+" icon in the top right corner
@@ -13,41 +14,33 @@ Your repository is now ready to be pushed to GitHub! Follow these steps:
 
 ## 2. Connect Your Local Repository to GitHub
 
-After creating the repository on GitHub, you'll see instructions. Run these commands (replace `YOUR_USERNAME` with your GitHub username):
+After creating the repository on GitHub, add the remote and push the tracked branch:
 
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/icad2mqtt.git
+git remote add origin https://github.com/JustBeanie/icad2mqtt.git
+git push -u origin master
+```
+
+If your repository uses `main` instead, rename the local branch first:
+```bash
 git branch -M main
 git push -u origin main
 ```
 
-If your default branch is `master` instead of `main`, use:
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/icad2mqtt.git
-git push -u origin master
-```
-
-## 3. Update Repository URLs
-
-After pushing, update these files with your actual GitHub username:
-
-1. **README.md**: Replace `YOUR_USERNAME` with your GitHub username in the clone URL
-2. **addon/addon.json**: Replace `YOUR_USERNAME` in the `url` and `image` fields
-
-## 4. Enable GitHub Actions
+## 3. Enable GitHub Actions
 
 GitHub Actions will automatically run on push and pull requests. The workflow will:
 - Run tests
 - Build the application
 - Build Docker images
 
-## 5. Optional: Add Topics and Description
+## 4. Optional: Add Topics and Description
 
 On your GitHub repository page:
 - Add topics like: `go`, `mqtt`, `home-assistant`, `docker`, `911`, `cad`
 - Add a description: "ICAD to MQTT Bridge - Fetch 911 CAD events and publish to MQTT"
 
-## 6. Optional: Create a Release
+## 5. Optional: Create a Release
 
 1. Go to the "Releases" section
 2. Click "Create a new release"

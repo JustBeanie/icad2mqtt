@@ -50,6 +50,12 @@ type Bridge struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
+		fmt.Println("icad2mqtt: fetch CAD events and publish changes over MQTT")
+		fmt.Println("configuration: MQTT_BROKER, MQTT_TOPIC, CLIENT_ID, POLL_INTERVAL, HTTP_USER_AGENT")
+		return
+	}
+
 	config, err := loadConfig()
 	if err != nil {
 		log.Fatalf("invalid configuration: %v", err)
