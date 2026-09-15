@@ -27,10 +27,19 @@ docker-compose up
 ## Configuration
 
 Via environment variables:
-- `MQTT_BROKER`: MQTT broker address (default: `tcp://localhost:1883`)
-- `MQTT_TOPIC`: MQTT topic for publishing events (default: `911/cad/events`)
-- `CLIENT_ID`: MQTT client ID (default: `icad2mqtt`)
-- `POLL_INTERVAL`: Polling interval in seconds (default: `30`)
+| Variable | Default | Description |
+|---|---|---|
+| `MQTT_BROKER` | `tcp://localhost:1883` | MQTT broker address |
+| `MQTT_BASE_TOPIC` | `911/cad` | Base for structured MQTT topics |
+| `MQTT_TOPIC` | `911/cad/events` | Raw HTML topic |
+| `PUBLISH_RAW` | `true` | Publish raw HTML on change |
+| `HA_DISCOVERY` | `false` | Enable Home Assistant discovery (reserved for publishing integration) |
+| `MQTT_USERNAME` | empty | Optional MQTT username |
+| `MQTT_PASSWORD` | empty | Optional MQTT password; never logged or printed |
+| `CLIENT_ID` | `icad2mqtt` | MQTT client ID |
+| `POLL_INTERVAL` | `60` seconds | Poll interval; values below 60 are clamped to 60 with one warning |
+| `HTTP_TIMEOUT` | `15` seconds | HTTP timeout, restricted to 5–60 seconds |
+| `HTTP_USER_AGENT` | `icad2mqtt/1.0` | HTTP User-Agent |
 
 ## Running Standalone
 
@@ -90,7 +99,12 @@ docker run \
    {
      "mqtt_broker": "tcp://localhost:1883",
      "mqtt_topic": "911/cad/events",
-     "poll_interval": 30
+     "mqtt_base_topic": "911/cad",
+     "publish_raw": true,
+     "ha_discovery": false,
+     "mqtt_username": "",
+     "mqtt_password": "",
+     "poll_interval": 60
    }
    ```
 
@@ -99,6 +113,8 @@ docker run \
 ### Notes
 - Requires MQTT broker running (built-in or separate)
 - Publishes to configured topic with QoS 1
+- Raw publishing is enabled by default and can be disabled with `publish_raw`.
+- Add-on options map to the environment variables above; the password is never logged.
 - Automatically restarts on failure
 
 ## Building Home Assistant Add-on
@@ -107,6 +123,9 @@ To build and test locally:
 ```bash
 docker build -f icad2mqtt/Dockerfile -t icad2mqtt-addon .
 ```
+
+To test add-on option extraction on a POSIX host with `jq`, run
+`sh icad2mqtt/run_test.sh`.
 
 ## Project Structure
 

@@ -19,8 +19,18 @@ services:
 options:
   mqtt_broker: "tcp://localhost:1883"
   mqtt_topic: "911/cad/events"
-  poll_interval: 30
+  mqtt_base_topic: "911/cad"
+  publish_raw: true
+  ha_discovery: false
+  mqtt_username: ""
+  mqtt_password: ""
+  poll_interval: 60
 schema:
   mqtt_broker: "str"
   mqtt_topic: "str?"
+  mqtt_base_topic: "str?"
+  publish_raw: "bool?"
+  ha_discovery: "bool?"
+  mqtt_username: "str?"
+  mqtt_password: "password?"
   poll_interval: "int?"
