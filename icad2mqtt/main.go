@@ -32,6 +32,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if discovery, _ := strictBool(env("HA_DISCOVERY", "false")); discovery {
+		log.Printf("the Home Assistant add-on currently publishes the raw topic only; structured topics and discovery require the main icad2mqtt binary; add-on support is planned")
+	}
 	if interval < time.Minute {
 		log.Printf("POLL_INTERVAL below 60 seconds; clamping to 60 seconds")
 		interval = time.Minute

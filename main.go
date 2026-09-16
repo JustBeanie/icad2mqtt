@@ -12,6 +12,9 @@ import (
 
 	"icad2mqtt/internal/config"
 	"icad2mqtt/internal/fetch"
+	"icad2mqtt/internal/normalize"
+	"icad2mqtt/internal/parse"
+	"icad2mqtt/internal/publish"
 	_ "time/tzdata" // Scratch/non-root images may not contain host zoneinfo.
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -23,6 +26,15 @@ type Config = config.Config
 type mqttPublisher interface {
 	Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token
 }
+type mqttOutput struct{ client mqttPublisher }
+
+func (o mqttOutput) Publish(topic string, qos byte, retained bool, payload []byte) error {
+	t := o.client.Publish(topic, qos, retained, payload)
+	if !t.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("publish timeout")
+	}
+	return t.Error()
+}
 
 type Bridge struct {
 	client     mqttPublisher
@@ -32,6 +44,7 @@ type Bridge struct {
 	lastHash   [32]byte
 	lastUpdate string
 	hasUpdate  bool
+	structured *publish.Manager
 	sleep      func(context.Context, time.Duration) bool
 }
 
@@ -53,7 +66,10 @@ func main() {
 	defer client.Disconnect(250)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	b := &Bridge{client: client, config: c, eventURL: cadEventURL, fetcher: &fetch.Fetcher{Client: &http.Client{Timeout: c.RequestTimeout}, URL: cadEventURL, UserAgent: c.UserAgent, PollInterval: c.PollInterval}}
+	b := &Bridge{client: client, config: c, eventURL: cadEventURL, fetcher: &fetch.Fetcher{Client: &http.Client{Timeout: c.RequestTimeout}, URL: cadEventURL, UserAgent: c.UserAgent, PollInterval: c.PollInterval}, structured: publish.New(publish.Config{BaseTopic: c.MqttBaseTopic, RawTopic: c.MqttTopic, ClientID: c.ClientID, PublishRaw: c.PublishRaw, HADiscovery: c.HADiscovery, Version: "1.0.0"}, mqttOutput{client})}
+	if err := b.structured.PublishDiscovery(); err != nil {
+		log.Printf("structured publish failed (topic=discovery)")
+	}
 	b.Run(ctx)
 }
 
@@ -81,9 +97,21 @@ func mqttOptions(c Config) *mqtt.ClientOptions {
 		opts.SetPassword(c.MqttPassword)
 	}
 	opts.SetAutoReconnect(true).SetConnectRetry(true).SetConnectRetryInterval(2 * time.Second)
-	opts.OnConnect = func(mqtt.Client) { log.Println("connected to MQTT broker") }
+	opts.SetWill(c.MqttBaseTopic+"/availability", "offline", 1, true)
+	opts.OnConnect = func(client mqtt.Client) {
+		log.Println("connected to MQTT broker")
+		publishOnline(client, c.MqttBaseTopic)
+	}
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) { log.Printf("MQTT connection lost: %v", err) }
 	return opts
+}
+
+func publishOnline(client mqttPublisher, base string) {
+	topic := base + "/availability"
+	token := client.Publish(topic, 1, true, "online")
+	if !token.WaitTimeout(5*time.Second) || token.Error() != nil {
+		log.Printf("MQTT publish failed (topic=%s)", topic)
+	}
 }
 
 func (b *Bridge) Run(ctx context.Context) {
@@ -115,16 +143,35 @@ func (b *Bridge) Run(ctx context.Context) {
 func (b *Bridge) poll(ctx context.Context) {
 	r, err := b.fetchEvents(ctx)
 	if err != nil {
-		log.Printf("failed to fetch CAD events: %v", err)
+		log.Printf("fetch failed (reason=fetch_error)")
+		if b.structured != nil {
+			_ = b.structured.Failure("fetch_error", time.Now())
+		}
 		return
 	}
 	changed, err := b.publishIfChanged(r)
 	if err != nil {
-		log.Printf("failed to publish CAD events: %v", err)
+		log.Printf("publish failed (topic=%s)", b.config.MqttTopic)
 		return
 	}
+	if b.structured != nil {
+		result, parseErr := parse.Parse(r.Body)
+		if parseErr != nil {
+			reason := "parse_error"
+			if pageErr, ok := parseErr.(*parse.PageError); ok {
+				reason = string(pageErr.Reason)
+			}
+			log.Printf("page rejected (reason=%s)", reason)
+			_ = b.structured.PageError(reason, time.Now())
+			return
+		}
+		snapshot, stats := normalize.Page(result, time.Now())
+		if publishErr := b.structured.Valid(snapshot, stats, time.Now()); publishErr != nil {
+			log.Printf("publish failed (topic=%s)", b.config.MqttBaseTopic)
+		}
+	}
 	if changed {
-		log.Printf("published CAD update (%d bytes)", len(r.Body))
+		log.Printf("published raw update (topic=%s)", b.config.MqttTopic)
 	}
 }
 

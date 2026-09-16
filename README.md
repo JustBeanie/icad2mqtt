@@ -33,7 +33,7 @@ Via environment variables:
 | `MQTT_BASE_TOPIC` | `911/cad` | Base for structured MQTT topics |
 | `MQTT_TOPIC` | `911/cad/events` | Raw HTML topic |
 | `PUBLISH_RAW` | `true` | Publish raw HTML on change |
-| `HA_DISCOVERY` | `false` | Enable Home Assistant discovery (reserved for publishing integration) |
+| `HA_DISCOVERY` | `false` | Enable count-only Home Assistant discovery |
 | `MQTT_USERNAME` | empty | Optional MQTT username |
 | `MQTT_PASSWORD` | empty | Optional MQTT password; never logged or printed |
 | `CLIENT_ID` | `icad2mqtt` | MQTT client ID |
@@ -55,6 +55,16 @@ go build -trimpath -o icad2mqtt
 
 Run the same checks used by CI with `go test -race ./...`, `go vet ./...`, and
 `gofmt -l .` (which must produce no output).
+
+## MQTT topics
+
+The root binary publishes schema v1 structured output under `MQTT_BASE_TOPIC`:
+`<base>/incidents` is a retained snapshot, `<base>/incident` is a non-retained
+transition event, `<base>/availability` is retained online/offline status,
+`<base>/health` is retained health JSON, and (with `HA_DISCOVERY=true`)
+`<base>/counts` is retained category counts. The raw HTML compatibility topic
+remains `MQTT_TOPIC`, QoS 1, non-retained, and enabled by default. See
+[docs/contract.md](docs/contract.md) for schema and privacy details.
 
 ## Running with Docker
 
@@ -114,6 +124,9 @@ docker run \
 - Requires MQTT broker running (built-in or separate)
 - Publishes to configured topic with QoS 1
 - Raw publishing is enabled by default and can be disabled with `publish_raw`.
+- This add-on module publishes raw HTML only. Structured topics and HA discovery
+  require the root binary; it logs a startup warning when `ha_discovery` is true
+  The Docker image runs the complete structured publisher; add-on support is planned.
 - Add-on options map to the environment variables above; the password is never logged.
 - Automatically restarts on failure
 
