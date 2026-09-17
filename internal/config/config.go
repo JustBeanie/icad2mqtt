@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -9,6 +10,10 @@ import (
 	"strings"
 	"time"
 )
+
+// OptionsPath is the Home Assistant add-on options file. It is a variable so
+// tests can use a temporary file without changing the production path.
+var OptionsPath = "/data/options.json"
 
 const (
 	DefaultBroker       = "tcp://localhost:1883"
@@ -49,7 +54,11 @@ func RedactBroker(raw string) string {
 }
 
 func Load() (Config, error) {
-	poll, err := seconds("POLL_INTERVAL", DefaultPollInterval/time.Second)
+	opts, err := loadOptions(OptionsPath)
+	if err != nil {
+		return Config{}, err
+	}
+	poll, err := secondsValue("POLL_INTERVAL", int64(DefaultPollInterval/time.Second), opts.pollInterval)
 	if err != nil {
 		return Config{}, err
 	}
@@ -61,31 +70,25 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	publishRaw, err := boolean("PUBLISH_RAW", true)
+	publishRaw, err := booleanValue("PUBLISH_RAW", true, opts.publishRaw)
 	if err != nil {
 		return Config{}, err
 	}
-	discovery, err := boolean("HA_DISCOVERY", false)
+	discovery, err := booleanValue("HA_DISCOVERY", false, opts.haDiscovery)
 	if err != nil {
 		return Config{}, err
 	}
-	base := os.Getenv("MQTT_BASE_TOPIC")
-	if base == "" {
-		base = DefaultBaseTopic
-	}
-	raw := os.Getenv("MQTT_TOPIC")
-	if raw == "" {
-		raw = base + "/events"
-	}
+	base := rawStringValue("MQTT_BASE_TOPIC", DefaultBaseTopic, opts.baseTopic)
+	raw := rawStringValue("MQTT_TOPIC", base+"/events", opts.topic)
 	if err := validTopic(base); err != nil {
 		return Config{}, fmt.Errorf("MQTT_BASE_TOPIC: %w", err)
 	}
 	if err := validTopic(raw); err != nil {
 		return Config{}, fmt.Errorf("MQTT_TOPIC: %w", err)
 	}
-	return Config{MqttBroker: env("MQTT_BROKER", DefaultBroker), MqttTopic: raw,
+	return Config{MqttBroker: stringValue("MQTT_BROKER", DefaultBroker, opts.broker), MqttTopic: raw,
 		MqttBaseTopic: base, PublishRaw: publishRaw, HADiscovery: discovery,
-		MqttUsername: strings.TrimSpace(os.Getenv("MQTT_USERNAME")), MqttPassword: os.Getenv("MQTT_PASSWORD"),
+		MqttUsername: strings.TrimSpace(stringValue("MQTT_USERNAME", "", opts.username)), MqttPassword: stringValue("MQTT_PASSWORD", "", opts.password),
 		ClientID: env("CLIENT_ID", DefaultClientID), PollInterval: time.Duration(poll) * time.Second,
 		RequestTimeout: time.Duration(timeout) * time.Second, UserAgent: env("HTTP_USER_AGENT", "icad2mqtt/1.0")}, nil
 }
@@ -98,12 +101,27 @@ func env(key, fallback string) string {
 }
 
 func seconds(key string, fallback time.Duration) (int64, error) {
-	raw := env(key, strconv.FormatInt(int64(fallback), 10))
+	return secondsValue(key, int64(fallback), nil)
+}
+
+func secondsValue(key string, fallback int64, option *int64) (int64, error) {
+	raw := strconv.FormatInt(fallback, 10)
+	if option != nil {
+		return *option, validateSeconds(key, *option)
+	}
+	raw = env(key, raw)
 	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || value < 1 {
 		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, raw)
 	}
 	return value, nil
+}
+
+func validateSeconds(key string, value int64) error {
+	if value < 1 {
+		return fmt.Errorf("%s must be a positive integer, got %d", key, value)
+	}
+	return nil
 }
 
 func secondsInRange(key string, fallback time.Duration, min, max int64) (int64, error) {
@@ -118,12 +136,108 @@ func secondsInRange(key string, fallback time.Duration, min, max int64) (int64, 
 }
 
 func boolean(key string, fallback bool) (bool, error) {
-	raw := env(key, strconv.FormatBool(fallback))
+	return booleanValue(key, fallback, nil)
+}
+
+func booleanValue(key string, fallback bool, option *bool) (bool, error) {
+	raw := strconv.FormatBool(fallback)
+	if option != nil {
+		return *option, nil
+	}
+	raw = env(key, raw)
 	v, err := strconv.ParseBool(raw)
 	if err != nil || (raw != "true" && raw != "false") {
 		return false, fmt.Errorf("%s must be true or false, got %q", key, raw)
 	}
 	return v, nil
+}
+
+func stringValue(key, fallback string, option *string) string {
+	if option != nil {
+		return *option
+	}
+	return env(key, fallback)
+}
+
+func rawStringValue(key, fallback string, option *string) string {
+	if option != nil {
+		return *option
+	}
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+type addonOptions struct {
+	broker       *string
+	baseTopic    *string
+	topic        *string
+	publishRaw   *bool
+	haDiscovery  *bool
+	username     *string
+	password     *string
+	pollInterval *int64
+}
+
+type addonOptionsJSON struct {
+	Broker       *string `json:"mqtt_broker"`
+	BaseTopic    *string `json:"mqtt_base_topic"`
+	Topic        *string `json:"mqtt_topic"`
+	PublishRaw   *bool   `json:"publish_raw"`
+	HADiscovery  *bool   `json:"ha_discovery"`
+	Username     *string `json:"mqtt_username"`
+	Password     *string `json:"mqtt_password"`
+	PollInterval *int64  `json:"poll_interval"`
+}
+
+func loadOptions(path string) (addonOptions, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return addonOptions{}, nil
+	}
+	if err != nil {
+		return addonOptions{}, fmt.Errorf("read options file: %w", err)
+	}
+	var raw addonOptionsJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return addonOptions{}, fmt.Errorf("options file contains malformed JSON")
+	}
+	broker := DefaultBroker
+	baseTopic := DefaultBaseTopic
+	topic := DefaultRawTopic
+	publishRaw := true
+	haDiscovery := false
+	username := ""
+	password := ""
+	pollInterval := int64(DefaultPollInterval / time.Second)
+	if raw.Broker != nil {
+		broker = *raw.Broker
+	}
+	if raw.BaseTopic != nil {
+		baseTopic = *raw.BaseTopic
+	}
+	if raw.Topic != nil {
+		topic = *raw.Topic
+	}
+	if raw.PublishRaw != nil {
+		publishRaw = *raw.PublishRaw
+	}
+	if raw.HADiscovery != nil {
+		haDiscovery = *raw.HADiscovery
+	}
+	if raw.Username != nil {
+		username = *raw.Username
+	}
+	if raw.Password != nil {
+		password = *raw.Password
+	}
+	if raw.PollInterval != nil {
+		pollInterval = *raw.PollInterval
+	}
+	return addonOptions{broker: &broker, baseTopic: &baseTopic, topic: &topic,
+		publishRaw: &publishRaw, haDiscovery: &haDiscovery, username: &username,
+		password: &password, pollInterval: &pollInterval}, nil
 }
 
 func validTopic(topic string) error {

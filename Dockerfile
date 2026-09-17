@@ -1,5 +1,8 @@
 # Build stage. Keep the build toolchain out of the runtime image.
-FROM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -13,22 +16,20 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o icad2mqtt .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -o icad2mqtt .
 
 # Final stage
-FROM alpine:3.20
+FROM alpine:3.24.1
 
 # Install ca-certificates for HTTPS
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S appgroup \
-    && adduser -S -G appgroup -h /nonexistent -s /sbin/nologin appuser
+    && addgroup -S -g 10001 appgroup \
+    && adduser -S -D -u 10001 -G appgroup -h /nonexistent -s /sbin/nologin appuser
 
 WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/icad2mqtt .
-
-USER appuser
 
 # The service only needs outbound HTTPS and MQTT connections.
 ENV GODEBUG=netdns=go

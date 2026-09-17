@@ -1,12 +1,14 @@
-version: '3.8'
-
 services:
   icad2mqtt:
     build: .
     container_name: icad2mqtt
+    user: "10001:10001"
     environment:
       - MQTT_BROKER=tcp://mosquitto:1883
+      - MQTT_BASE_TOPIC=911/cad
       - MQTT_TOPIC=911/cad/events
+      - PUBLISH_RAW=true
+      - HA_DISCOVERY=false
       - POLL_INTERVAL=30
     depends_on:
       - mosquitto
@@ -18,7 +20,7 @@ services:
         max-file: "3"
 
   mosquitto:
-    image: eclipse-mosquitto:latest
+    image: eclipse-mosquitto:2.1.2-alpine
     container_name: mosquitto
     ports:
       - "1883:1883"

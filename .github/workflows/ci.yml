@@ -2,119 +2,95 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-      go-version: '1.24'
-    
-    - name: Download dependencies
-      run: go mod download
-    
-    - name: Verify dependencies
-      run: go mod verify
-    
-    - name: Format check
-      shell: bash
-      run: test -z "$(gofmt -l .)"
-
-    - name: Vet
-      run: go vet ./...
-
-    - name: Build
-      run: go build -trimpath -v ./...
-    
-    - name: Test with race detector
-      run: go test -race -coverprofile=coverage.out -covermode=atomic -v ./...
-
-    - name: Upload coverage
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage
-        path: coverage.out
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Download dependencies
+        run: go mod download
+      - name: Verify dependencies
+        run: go mod verify
+      - name: Format check
+        shell: bash
+        run: test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build -trimpath -v ./...
+      - name: Test with race detector
+        run: go test -race -coverprofile=coverage.out -covermode=atomic -v ./...
+      - name: Upload coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage
+          path: coverage.out
 
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-        cache: true
-    - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: v1.64.8
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6.5.2
+        with:
+          version: v1.64.8
 
   vulnerability-scan:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-        cache: true
-    - name: Run govulncheck
-      uses: golang/govulncheck-action@v1
-      with:
-        go-version-file: go.mod
-        go-package: ./...
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          go-package: ./...
 
-  addon:
+  docker:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: icad2mqtt
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5
-      with:
-        go-version-file: icad2mqtt/go.mod
-        cache: true
-    - name: Download add-on dependencies
-      run: go mod download
-    - name: Verify add-on dependencies
-      run: go mod verify
-    - name: Check add-on formatting
-      run: test -z "$(gofmt -l .)"
-    - name: Vet add-on
-      run: go vet ./...
-    - name: Test add-on
-      run: go test ./...
-    - name: Build add-on binary
-      run: go build -trimpath ./...
-
-  build:
-    runs-on: ubuntu-latest
-    needs: [test, lint, vulnerability-scan, addon]
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Build Docker image
-      run: docker build --pull --tag icad2mqtt:test .
-    
-    - name: Test Docker image
-      run: docker run --rm --read-only --cap-drop=ALL icad2mqtt:test --help
-
-    - name: Scan Docker image
-      uses: aquasecurity/trivy-action@0.28.0
-      with:
-        image-ref: icad2mqtt:test
-        format: table
-        exit-code: '1'
-        ignore-unfixed: true
-        vuln-type: os,library
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build Docker image
+        run: docker build --pull --tag icad2mqtt:test .
+      - name: Test Docker image
+        run: docker run --rm --read-only --cap-drop=ALL icad2mqtt:test --help
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: icad2mqtt:test
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+      - name: Build multi-architecture image without publishing
+        run: docker buildx build --platform linux/amd64,linux/arm64 --tag icad2mqtt:ci --output type=oci,dest=/tmp/icad2mqtt.tar .

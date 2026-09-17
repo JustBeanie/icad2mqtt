@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,84 @@ func clearConfigEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range configEnvKeys {
 		t.Setenv(key, "")
+	}
+}
+
+func useOptionsFile(t *testing.T, contents string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "options.json")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := OptionsPath
+	OptionsPath = path
+	t.Cleanup(func() { OptionsPath = old })
+}
+
+func TestOptionsLoaderTableA(t *testing.T) {
+	tests := []struct {
+		name  string
+		json  string
+		check func(t *testing.T, got Config, err error)
+	}{
+		{name: "empty object", json: `{}`, check: func(t *testing.T, got Config, err error) {
+			if err != nil || got.MqttBroker != DefaultBroker || got.MqttBaseTopic != DefaultBaseTopic || got.MqttTopic != DefaultRawTopic || !got.PublishRaw || got.HADiscovery || got.PollInterval != DefaultPollInterval {
+				t.Fatalf("got=%+v err=%v", got, err)
+			}
+		}},
+		{name: "explicit false and zero", json: `{"publish_raw":false,"poll_interval":0}`, check: func(t *testing.T, got Config, err error) {
+			if err == nil || got.PublishRaw || !strings.Contains(err.Error(), "POLL_INTERVAL must be a positive integer") {
+				t.Fatalf("got=%+v err=%v", got, err)
+			}
+		}},
+		{name: "null values", json: `{"mqtt_broker":null,"mqtt_base_topic":null,"mqtt_topic":null,"publish_raw":null,"ha_discovery":null,"mqtt_username":null,"mqtt_password":null,"poll_interval":null}`, check: func(t *testing.T, got Config, err error) {
+			if err != nil || got.MqttBroker != DefaultBroker || got.MqttBaseTopic != DefaultBaseTopic || got.MqttTopic != DefaultRawTopic || !got.PublishRaw || got.HADiscovery || got.PollInterval != DefaultPollInterval {
+				t.Fatalf("got=%+v err=%v", got, err)
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			useOptionsFile(t, test.json)
+			got, err := Load()
+			test.check(t, got, err)
+		})
+	}
+}
+
+func TestOptionsPrecedenceB(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("MQTT_BROKER", "tcp://env:1883")
+	t.Setenv("MQTT_BASE_TOPIC", "env/base")
+	t.Setenv("PUBLISH_RAW", "false")
+	t.Setenv("POLL_INTERVAL", "120")
+	useOptionsFile(t, `{"mqtt_broker":"tcp://file:1883","mqtt_base_topic":"file/base","publish_raw":true,"poll_interval":30}`)
+	got, err := Load()
+	if err != nil || got.MqttBroker != "tcp://file:1883" || got.MqttBaseTopic != "file/base" || !got.PublishRaw || got.PollInterval != time.Minute {
+		t.Fatalf("options precedence got=%+v err=%v", got, err)
+	}
+	old := OptionsPath
+	OptionsPath = filepath.Join(t.TempDir(), "missing.json")
+	t.Cleanup(func() { OptionsPath = old })
+	got, err = Load()
+	if err != nil || got.MqttBroker != "tcp://env:1883" || got.MqttBaseTopic != "env/base" || got.PublishRaw || got.PollInterval != 2*time.Minute {
+		t.Fatalf("environment fallback got=%+v err=%v", got, err)
+	}
+	useOptionsFile(t, `{}`)
+	got, err = Load()
+	if err != nil || got.MqttBroker != DefaultBroker || got.MqttBaseTopic != DefaultBaseTopic || got.PollInterval != DefaultPollInterval || !got.PublishRaw {
+		t.Fatalf("empty options should apply defaults got=%+v err=%v", got, err)
+	}
+}
+
+func TestMalformedOptionsRedactsPasswordA(t *testing.T) {
+	clearConfigEnv(t)
+	secret := "options-password-not-for-logs"
+	useOptionsFile(t, `{"mqtt_password":"`+secret+`",`)
+	_, err := Load()
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("error=%v", err)
 	}
 }
 

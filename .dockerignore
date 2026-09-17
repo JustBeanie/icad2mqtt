@@ -6,4 +6,6 @@
 *.log
 *.test
 vendor
-icad2mqtt
+docs
+testdata
+**/*_test.go

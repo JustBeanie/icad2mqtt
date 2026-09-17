@@ -39,8 +39,6 @@ go.work
 # Build artifacts
 *.a
 *.o
-.gocache/
 
 # OS files
 Thumbs.db
-.DS_Store

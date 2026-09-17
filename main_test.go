@@ -16,6 +16,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"icad2mqtt/internal/config"
 	"icad2mqtt/internal/fetch"
 	"icad2mqtt/internal/model"
 	"icad2mqtt/internal/normalize"
@@ -334,6 +335,50 @@ func TestLoadConfigDelegates(t *testing.T) {
 	t.Setenv("POLL_INTERVAL", "60")
 	if got, err := loadConfig(); err != nil || got.PollInterval != time.Minute {
 		t.Fatalf("config=%+v err=%v", got, err)
+	}
+}
+
+func TestLoadConfigWiresOptionsC(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "options.json")
+	if err := os.WriteFile(path, []byte(`{"mqtt_broker":"tcp://file:1883","mqtt_base_topic":"file/base","publish_raw":false,"poll_interval":75,"mqtt_password":"wire-secret"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := config.OptionsPath
+	config.OptionsPath = path
+	t.Cleanup(func() { config.OptionsPath = oldPath })
+	t.Setenv("MQTT_BROKER", "tcp://env:1883")
+	got, err := loadConfig()
+	if err != nil || got.MqttBroker != "tcp://file:1883" || got.MqttBaseTopic != "file/base" || got.PublishRaw || got.PollInterval != 75*time.Second {
+		t.Fatalf("config=%+v err=%v", got, err)
+	}
+	if strings.Contains(got.String(), "wire-secret") {
+		t.Fatalf("config string leaked password: %s", got.String())
+	}
+}
+
+func TestPrivilegeDropOrderingC(t *testing.T) {
+	var events []string
+	stop := errors.New("stop after connect")
+	err := runWithConfig(
+		func() (Config, error) { events = append(events, "config"); return Config{}, nil },
+		func() error { events = append(events, "drop"); return nil },
+		func(Config) (mqtt.Client, error) { events = append(events, "mqtt"); return nil, stop },
+	)
+	if !errors.Is(err, stop) || strings.Join(events, ",") != "config,drop,mqtt" {
+		t.Fatalf("err=%v events=%v", err, events)
+	}
+}
+
+func TestPrivilegeDropFailureStopsNetworkC(t *testing.T) {
+	var events []string
+	failure := errors.New("drop failed")
+	err := runWithConfig(
+		func() (Config, error) { events = append(events, "config"); return Config{}, nil },
+		func() error { events = append(events, "drop"); return failure },
+		func(Config) (mqtt.Client, error) { events = append(events, "mqtt"); return nil, nil },
+	)
+	if !errors.Is(err, failure) || strings.Join(events, ",") != "config,drop" {
+		t.Fatalf("err=%v events=%v", err, events)
 	}
 }
 

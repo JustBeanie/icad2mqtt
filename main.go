@@ -54,7 +54,7 @@ func main() {
 		fmt.Println("configuration: MQTT_BROKER, MQTT_BASE_TOPIC, MQTT_TOPIC, PUBLISH_RAW, HA_DISCOVERY, MQTT_USERNAME, MQTT_PASSWORD, CLIENT_ID, POLL_INTERVAL, HTTP_TIMEOUT, HTTP_USER_AGENT")
 		return
 	}
-	c, err := loadConfig()
+	c, err := loadConfigAndDrop()
 	if err != nil {
 		log.Fatalf("invalid configuration: %v", err)
 	}
@@ -66,7 +66,7 @@ func main() {
 	defer client.Disconnect(250)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	b := &Bridge{client: client, config: c, eventURL: cadEventURL, fetcher: &fetch.Fetcher{Client: &http.Client{Timeout: c.RequestTimeout}, URL: cadEventURL, UserAgent: c.UserAgent, PollInterval: c.PollInterval}, structured: publish.New(publish.Config{BaseTopic: c.MqttBaseTopic, RawTopic: c.MqttTopic, ClientID: c.ClientID, PublishRaw: c.PublishRaw, HADiscovery: c.HADiscovery, Version: "1.0.0"}, mqttOutput{client})}
+	b := &Bridge{client: client, config: c, eventURL: cadEventURL, fetcher: &fetch.Fetcher{Client: &http.Client{Timeout: c.RequestTimeout}, URL: cadEventURL, UserAgent: c.UserAgent, PollInterval: c.PollInterval}, structured: publish.New(publish.Config{BaseTopic: c.MqttBaseTopic, RawTopic: c.MqttTopic, ClientID: c.ClientID, PublishRaw: c.PublishRaw, HADiscovery: c.HADiscovery, Version: "2.0.0"}, mqttOutput{client})}
 	if err := b.structured.PublishDiscovery(); err != nil {
 		log.Printf("structured publish failed (topic=discovery)")
 	}
@@ -74,6 +74,32 @@ func main() {
 }
 
 func loadConfig() (Config, error) { return config.Load() }
+
+var dropPrivilegesFn = dropPrivileges
+
+func loadConfigAndDrop() (Config, error) {
+	return loadAndDropConfig(loadConfig, dropPrivilegesFn)
+}
+
+func loadAndDropConfig(load func() (Config, error), drop func() error) (Config, error) {
+	c, err := load()
+	if err != nil {
+		return Config{}, err
+	}
+	if err := drop(); err != nil {
+		return Config{}, fmt.Errorf("drop privileges: %w", err)
+	}
+	return c, nil
+}
+
+func runWithConfig(load func() (Config, error), drop func() error, connect func(Config) (mqtt.Client, error)) error {
+	c, err := loadAndDropConfig(load, drop)
+	if err != nil {
+		return err
+	}
+	_, err = connect(c)
+	return err
+}
 
 func connectMQTT(c Config) (mqtt.Client, error) {
 	opts := mqttOptions(c)
