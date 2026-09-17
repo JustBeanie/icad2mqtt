@@ -19,7 +19,8 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -o icad2mqtt .
+# Build outside /app: the source tree has an icad2mqtt/ add-on folder of the same name.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -o /out/icad2mqtt .
 
 # Final stage
 FROM scratch
@@ -28,7 +29,7 @@ WORKDIR /app
 
 # This is safe on scratch: the binary is static, Go provides TLS, and the CA
 # bundle is copied explicitly; time/tzdata is embedded in the binary.
-COPY --from=builder /app/icad2mqtt /app/icad2mqtt
+COPY --from=builder /out/icad2mqtt /app/icad2mqtt
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 # The service only needs outbound HTTPS and MQTT connections.
