@@ -39,9 +39,10 @@ docker run -e MQTT_BROKER=tcp://broker.example.com:1883 icad2mqtt:local
 ```
 
 The root `Dockerfile` builds a static `linux/amd64` or `linux/arm64` image and
-uses CA certificates. The binary starts as root only to read add-on options,
-then drops permanently to UID/GID 10001 before network activity; Compose shows
-how to run it directly as that unprivileged user.
+uses a minimal `scratch` runtime with an explicitly copied CA bundle. The
+binary starts as root only to read add-on options, then drops permanently to
+UID/GID 10001 before network activity; Compose shows how to run it directly as
+that unprivileged user.
 
 ## Home Assistant add-on
 

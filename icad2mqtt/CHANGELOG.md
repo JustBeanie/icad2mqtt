@@ -4,6 +4,7 @@
 
 - Update `golang.org/x/net` to address the reported security vulnerabilities.
 - Bump the Go toolchain requirement to Go 1.26.
+- Use a minimal scratch runtime image with a copied CA bundle.
 
 ## 2.0.0
 

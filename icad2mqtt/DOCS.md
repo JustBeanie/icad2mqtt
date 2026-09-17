@@ -2,7 +2,9 @@
 
 This Home Assistant add-on uses the published multi-architecture image
 `ghcr.io/justbeanie/icad2mqtt:2.0.0`. The same binary is used by Docker and by
-the add-on; it reads `/data/options.json` directly when that file exists.
+the add-on; it reads `/data/options.json` directly when that file exists. The
+image uses a minimal `scratch` runtime with the CA bundle copied from the build
+stage; the static binary embeds its timezone data.
 
 The add-on options keep the `mqtt_broker`, `mqtt_topic`, `mqtt_base_topic`,
 `publish_raw`, `ha_discovery`, `mqtt_username`, `mqtt_password`, and

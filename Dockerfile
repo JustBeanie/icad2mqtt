@@ -9,6 +9,9 @@ WORKDIR /app
 # Copy module metadata first so dependency downloads are cached.
 COPY go.mod go.sum ./
 
+# The scratch runtime needs the CA bundle for outbound HTTPS.
+RUN apk add --no-cache ca-certificates
+
 # Download dependencies
 RUN go mod download
 
@@ -19,17 +22,14 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -o icad2mqtt .
 
 # Final stage
-FROM alpine:3.24.1
-
-# Install ca-certificates for HTTPS
-RUN apk add --no-cache ca-certificates \
-    && addgroup -S -g 10001 appgroup \
-    && adduser -S -D -u 10001 -G appgroup -h /nonexistent -s /sbin/nologin appuser
+FROM scratch
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/icad2mqtt .
+# This is safe on scratch: the binary is static, Go provides TLS, and the CA
+# bundle is copied explicitly; time/tzdata is embedded in the binary.
+COPY --from=builder /app/icad2mqtt /app/icad2mqtt
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 # The service only needs outbound HTTPS and MQTT connections.
 ENV GODEBUG=netdns=go

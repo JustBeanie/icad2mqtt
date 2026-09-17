@@ -9,11 +9,12 @@ audit.
 - Docker and the Home Assistant add-on use one statically linked Go binary and
   one multi-architecture image. The add-on reads `/data/options.json` natively;
   it no longer carries a second module or shell/JQ configuration path.
-- The runtime image is based on pinned Alpine 3.24.1 and installs CA
-  certificates. It starts as root only to read Home Assistant's mode-0600
-  `/data/options.json`, then clears supplementary groups and drops permanently
-  to fixed UID/GID 10001 before MQTT or HTTP activity. No extra file-bypass
-  capability is requested. Compose demonstrates direct non-root execution.
+- The runtime image is a minimal `scratch` image containing only the static
+  Go binary and an explicitly copied CA bundle. It starts as root only to read
+  Home Assistant's mode-0600 `/data/options.json`, then clears supplementary
+  groups and drops permanently to fixed UID/GID 10001 before MQTT or HTTP
+  activity. No extra file-bypass capability is requested. Compose demonstrates
+  direct non-root execution.
 - Configuration validation rejects invalid topics and intervals, and password
   values are redacted from `Config.String` and option parse errors.
 - HTTP requests have timeouts, status checks, size limits, and cancellation;
