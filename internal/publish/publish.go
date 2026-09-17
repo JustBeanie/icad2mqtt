@@ -55,7 +55,6 @@ type Manager struct {
 	lastSnapshot []byte
 	lastCounts   []byte
 	health       Health
-	lastPoll     time.Time
 }
 
 func New(cfg Config, out Publisher) *Manager {

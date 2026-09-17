@@ -1,5 +1,5 @@
 # Build stage. Keep the build toolchain out of the runtime image.
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -35,4 +35,4 @@ COPY --from=builder /app/icad2mqtt .
 ENV GODEBUG=netdns=go
 
 # Run the application
-CMD ["./icad2mqtt"]
+ENTRYPOINT ["/app/icad2mqtt"]

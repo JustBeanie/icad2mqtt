@@ -120,8 +120,7 @@ func Parse(src string) (Result, error) {
 		}
 		res.Rows = append(res.Rows, r)
 	}
-	if len(res.Rows) == 0 { // header-only is valid structure
-	} // Updated text is deliberately found outside row shape.
+	// Updated text is deliberately found outside row shape.
 	var find func(*html.Node)
 	find = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "span" && hasAttr(n, "id", "cdate") {

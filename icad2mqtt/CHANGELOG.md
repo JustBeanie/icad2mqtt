@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Update `golang.org/x/net` to address the reported security vulnerabilities.
+- Bump the Go toolchain requirement to Go 1.26.
+
 ## 2.0.0
 
 - Publish structured incident topics, retained availability, health, discovery

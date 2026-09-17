@@ -14,7 +14,9 @@ func TestGoldenShapeAndOrder(t *testing.T) {
 		t.Fatal(string(b), e)
 	}
 	var m map[string]any
-	json.Unmarshal(b, &m)
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
 	if m["schema"].(float64) != 1 {
 		t.Fatal(m)
 	}

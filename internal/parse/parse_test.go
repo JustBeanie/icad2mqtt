@@ -35,6 +35,17 @@ func TestParseFailuresAndCleanup(t *testing.T) {
 	}
 }
 
+func TestHeaderOnlyIsValid(t *testing.T) {
+	src := `<table><tr><th>Agency</th><th>Date/Time</th><th>x</th><th>Address</th><th>x</th><th>Cross Streets</th></tr></table>`
+	r, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Rows) != 0 {
+		t.Fatalf("rows=%d, want header-only result", len(r.Rows))
+	}
+}
+
 func TestRowShapes(t *testing.T) {
 	root, err := html.Parse(strings.NewReader(fixture(t)))
 	if err != nil {

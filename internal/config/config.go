@@ -135,10 +135,6 @@ func secondsInRange(key string, fallback time.Duration, min, max int64) (int64, 
 	return v, nil
 }
 
-func boolean(key string, fallback bool) (bool, error) {
-	return booleanValue(key, fallback, nil)
-}
-
 func booleanValue(key string, fallback bool, option *bool) (bool, error) {
 	raw := strconv.FormatBool(fallback)
 	if option != nil {

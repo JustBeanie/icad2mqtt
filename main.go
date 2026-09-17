@@ -54,7 +54,7 @@ func main() {
 		fmt.Println("configuration: MQTT_BROKER, MQTT_BASE_TOPIC, MQTT_TOPIC, PUBLISH_RAW, HA_DISCOVERY, MQTT_USERNAME, MQTT_PASSWORD, CLIENT_ID, POLL_INTERVAL, HTTP_TIMEOUT, HTTP_USER_AGENT")
 		return
 	}
-	c, err := loadConfigAndDrop()
+	c, err := loadConfigAndDropFn()
 	if err != nil {
 		log.Fatalf("invalid configuration: %v", err)
 	}
@@ -72,6 +72,8 @@ func main() {
 	}
 	b.Run(ctx)
 }
+
+var loadConfigAndDropFn = loadConfigAndDrop
 
 func loadConfig() (Config, error) { return config.Load() }
 

@@ -16,7 +16,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 ## Development Setup
 
 ### Prerequisites
-- Go 1.21 or later
+- Go 1.26 or later
 - Docker (optional, for testing with docker-compose)
 - MQTT broker (for testing)
 

@@ -4,6 +4,11 @@ The service fetches the current CAD events document and publishes changes over
 MQTT. It emits structured incident, availability, health, and optional Home
 Assistant discovery topics, plus the raw compatibility topic.
 
+## Prerequisites
+
+Go 1.26 or later is required to build and test the project. Docker and an MQTT
+broker are optional for local container and integration testing.
+
 ## Configuration
 
 Docker uses environment variables. The Home Assistant add-on uses the same

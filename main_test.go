@@ -392,5 +392,11 @@ func TestMainHelpPath(t *testing.T) {
 	old := os.Args
 	os.Args = []string{"icad2mqtt", "--help"}
 	t.Cleanup(func() { os.Args = old })
+	oldLoad := loadConfigAndDropFn
+	loadConfigAndDropFn = func() (Config, error) {
+		t.Fatal("help must return before config loading and privilege drop")
+		return Config{}, nil
+	}
+	t.Cleanup(func() { loadConfigAndDropFn = oldLoad })
 	main()
 }

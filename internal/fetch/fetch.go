@@ -47,7 +47,10 @@ func (f *Fetcher) Fetch(ctx context.Context) (Response, error) {
 		f.Failures++
 		return Response{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// The response body is already fully read below; close errors cannot change the response.
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		f.Failures++
 		return Response{}, fmt.Errorf("unexpected HTTP status: %s", resp.Status)
